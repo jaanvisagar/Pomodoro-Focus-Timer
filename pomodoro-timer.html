@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pomodoro Focus Timer</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0e0e0f;
+      --surface: #1a1a1c;
+      --surface2: #242426;
+      --border: #2e2e31;
+      --border2: #3d3d41;
+      --text: #f0ede8;
+      --text-muted: #7a7876;
+      --text-dim: #4a4947;
+      --accent: #f0ede8;
+      --font: 'JetBrains Mono', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .app { width: 100%; max-width: 400px; }
+
+    /* Header */
+    .header { text-align: center; margin-bottom: 2.5rem; }
+    .header h1 { font-size: 13px; font-weight: 400; letter-spacing: 3px; color: var(--text-muted); text-transform: uppercase; }
+
+    /* Mode Tabs */
+    .tabs { display: flex; gap: 6px; margin-bottom: 2.5rem; background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px; padding: 4px; }
+    .tab {
+      flex: 1; padding: 8px 4px; font-size: 11px; font-family: var(--font);
+      font-weight: 500; letter-spacing: 1px; text-transform: uppercase;
+      cursor: pointer; border: none; border-radius: 7px;
+      background: transparent; color: var(--text-muted);
+      transition: all 0.2s; white-space: nowrap;
+    }
+    .tab.active { background: var(--surface2); color: var(--text); }
+    .tab:hover:not(.active) { color: var(--text); }
+
+    /* Ring */
+    .ring-area { display: flex; justify-content: center; align-items: center; position: relative; margin-bottom: 2.5rem; }
+    .ring-label { position: absolute; text-align: center; pointer-events: none; }
+    .ring-time { font-size: 52px; font-weight: 500; letter-spacing: 4px; color: var(--text); line-height: 1; }
+    .ring-sub { font-size: 10px; color: var(--text-dim); margin-top: 8px; letter-spacing: 2px; text-transform: uppercase; }
+
+    #ring-track { stroke: var(--surface2); }
+    #ring-progress { transition: stroke-dashoffset 1s linear; }
+
+    /* Session Dots */
+    .dots { display: flex; justify-content: center; gap: 10px; margin-bottom: 2rem; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--border2); background: transparent; transition: all 0.3s; }
+    .dot.done { background: var(--text); border-color: var(--text); }
+    .dot.current { border-color: var(--text-muted); }
+
+    /* Controls */
+    .controls { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 2.5rem; }
+    .btn-icon {
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 0.5px solid var(--border); background: transparent;
+      color: var(--text-muted); font-size: 16px; font-family: var(--font);
+      cursor: pointer; transition: all 0.15s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-icon:hover { border-color: var(--border2); color: var(--text); }
+    .btn-icon:active { transform: scale(0.94); }
+    .btn-main {
+      padding: 14px 48px; font-size: 13px; font-family: var(--font);
+      font-weight: 500; letter-spacing: 2px; text-transform: uppercase;
+      border: 0.5px solid var(--border2); border-radius: 8px;
+      background: var(--surface); color: var(--text);
+      cursor: pointer; transition: all 0.15s; min-width: 140px;
+    }
+    .btn-main:hover { background: var(--surface2); border-color: var(--text-dim); }
+    .btn-main:active { transform: scale(0.97); }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .stat { background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px; padding: 14px 8px; text-align: center; }
+    .stat-val { font-size: 20px; font-weight: 500; color: var(--text); }
+    .stat-lbl { font-size: 10px; color: var(--text-dim); margin-top: 4px; letter-spacing: 1px; text-transform: uppercase; }
+
+    /* Notification flash */
+    .flash { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 0.5px solid var(--border2); border-radius: 8px; padding: 10px 20px; font-size: 12px; letter-spacing: 1px; color: var(--text); opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10; }
+    .flash.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <div class="header">
+    <h1>Focus Timer</h1>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" id="tab-work"  onclick="switchMode('work')">Focus</button>
+    <button class="tab"        id="tab-short" onclick="switchMode('short')">Short Break</button>
+    <button class="tab"        id="tab-long"  onclick="switchMode('long')">Long Break</button>
+  </div>
+
+  <div class="ring-area">
+    <svg width="240" height="240" viewBox="0 0 240 240">
+      <circle id="ring-track" cx="120" cy="120" r="104" fill="none" stroke-width="5"/>
+      <circle id="ring-progress" cx="120" cy="120" r="104" fill="none"
+        stroke="#f0ede8" stroke-width="5" stroke-linecap="round"
+        stroke-dasharray="653.45" stroke-dashoffset="0"
+        transform="rotate(-90 120 120)"/>
+    </svg>
+    <div class="ring-label">
+      <div class="ring-time" id="display">25:00</div>
+      <div class="ring-sub"  id="mode-label">focus time</div>
+    </div>
+  </div>
+
+  <div class="dots" id="dots"></div>
+
+  <div class="controls">
+    <button class="btn-icon" onclick="resetTimer()" title="Reset">&#8635;</button>
+    <button class="btn-main" id="btn-start" onclick="toggle()">Start</button>
+    <button class="btn-icon" onclick="skipForward()" title="Skip">&#8594;</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-val" id="s-sessions">0</div>
+      <div class="stat-lbl">Sessions</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="s-focus">0m</div>
+      <div class="stat-lbl">Focused</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="s-streak">0</div>
+      <div class="stat-lbl">Streak</div>
+    </div>
+  </div>
+</div>
+
+<div class="flash" id="flash"></div>
+
+<script>
+  const MODES = {
+    work:  { label: 'focus time',   secs: 25 * 60 },
+    short: { label: 'short break',  secs: 5  * 60 },
+    long:  { label: 'long break',   secs: 15 * 60 }
+  };
+  const CIRC = 2 * Math.PI * 104;
+
+  let mode = 'work';
+  let remaining = MODES.work.secs;
+  let total = MODES.work.secs;
+  let running = false;
+  let timer = null;
+  let autoStartTimeout = null;
+  let sessions = 0;
+  let focusMin = 0;
+  let streak = 0;
+  let lastDate = null;
+
+  function fmt(s) {
+    const m = Math.floor(s / 60), sec = s % 60;
+    return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  }
+
+  function updateRing() {
+    const pct = remaining / total;
+    const offset = (1 - pct) * CIRC;
+    document.getElementById('ring-progress').setAttribute('stroke-dashoffset', String(offset));
+    document.getElementById('display').textContent = fmt(remaining);
+    document.title = fmt(remaining) + ' — Focus Timer';
+  }
+
+  function buildDots() {
+    const c = document.getElementById('dots');
+    c.innerHTML = '';
+    const filled = sessions % 4;
+    for (let i = 0; i < 4; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i < filled ? ' done' : (i === filled ? ' current' : ''));
+      c.appendChild(d);
+    }
+  }
+
+  function showFlash(msg) {
+    const f = document.getElementById('flash');
+    f.textContent = msg;
+    f.classList.add('show');
+    setTimeout(() => f.classList.remove('show'), 2200);
+  }
+
+  function switchMode(m, silent = false) {
+    pause();
+    mode = m;
+    total = remaining = MODES[m].secs;
+    document.getElementById('mode-label').textContent = MODES[m].label;
+    ['work', 'short', 'long'].forEach(t =>
+      document.getElementById('tab-' + t).classList.toggle('active', t === m)
+    );
+    document.getElementById('btn-start').textContent = 'Start';
+    updateRing();
+    if (!silent) buildDots();
+  }
+
+  function toggle() {
+    running ? pause() : start();
+  }
+
+  function start() {
+    running = true;
+    document.getElementById('btn-start').textContent = 'Pause';
+    timer = setInterval(() => {
+      remaining--;
+      updateRing();
+      if (remaining <= 0) finish();
+    }, 1000);
+  }
+
+  function pause() {
+    running = false;
+    clearInterval(timer);
+    clearTimeout(autoStartTimeout);
+    timer = null;
+    document.getElementById('btn-start').textContent = 'Start';
+  }
+
+  function finish() {
+    pause();
+    if (mode === 'work') {
+      sessions++;
+      focusMin += Math.round(MODES.work.secs / 60);
+      const today = new Date().toDateString();
+      const yesterday = new Date(Date.now() - 86400000).toDateString();
+      if (lastDate === yesterday) streak++;
+      else if (lastDate !== today) streak = 1;
+      lastDate = today;
+      document.getElementById('s-sessions').textContent = sessions;
+      document.getElementById('s-focus').textContent = focusMin + 'm';
+      document.getElementById('s-streak').textContent = streak;
+      buildDots();
+      const nextMode = sessions % 4 === 0 ? 'long' : 'short';
+      showFlash(nextMode === 'long' ? 'Great work! Long break time.' : 'Nice session! Take a short break.');
+      switchMode(nextMode, true);
+    } else {
+      showFlash('Break over. Back to focus!');
+      switchMode('work', true);
+    }
+    // Don't auto-start — user presses Start when ready
+  }
+
+  function resetTimer() {
+    switchMode(mode, true);
+    buildDots();
+  }
+
+  function skipForward() {
+    finish();
+  }
+
+  buildDots();
+  updateRing();
+</script>
+</body>
+</html>
